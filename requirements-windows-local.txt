@@ -1,0 +1,6 @@
+./submodules/diff-gaussian-rasterization
+./submodules/diff-gaussian-rasterization-w-pose
+./submodules/simple-knn
+./submodules/minLoRA
+./submodules/CLIP
+./submodules/segment-anything
