@@ -6,6 +6,17 @@
 
 Rather than simply reproducing the original method, this project improves keyframe selection, foreground-mask generation, and COLMAP point-cloud filtering for real captured data. It also evaluates different initialization methods, the effects of view count and spatial coverage, and the engineering feasibility of Gaussian Repair.
 
+## Demo Videos
+
+The following videos show novel-view renderings produced by the reconstructed 3D Gaussian models. Click a preview link to play or download the corresponding MP4 file.
+
+| Scene | Description | Video |
+|---|---|---|
+| USTC object | A camera trajectory rendered around the reconstructed object, demonstrating overall geometry, appearance consistency, and view interpolation. | [Watch `ustc.mp4`](assets/videos/ustc.mp4) |
+| Pikachu | A novel-view rendering of the reconstructed Pikachu object, used to inspect foreground boundaries, texture preservation, and reconstruction stability around the object. | [Watch `pikaqiu.mp4`](assets/videos/pikaqiu.mp4) |
+
+> GitHub may display MP4 files on a separate page instead of playing them directly inside the README. Both files are kept under `assets/videos/` so that they are included when the repository is cloned.
+
 ## Highlights
 
 - **Accessible data capture:** uses an orbiting object video recorded with an ordinary smartphone.
@@ -34,6 +45,34 @@ Gaussian Repair
     ↓
 Novel-View Rendering and PSNR / SSIM / LPIPS Evaluation
 ```
+
+### 1. Video and Keyframe Preparation
+
+The input is a handheld or turntable-style video that observes the target object from multiple directions. Frames are sampled from the video and filtered according to sharpness and visual redundancy. This step avoids spending training time on nearly identical images and reduces artifacts caused by motion blur.
+
+For best results, the captured sequence should:
+
+- keep the entire object visible throughout the video;
+- provide a full horizontal orbit and several elevated or downward-looking views;
+- use stable exposure and focus;
+- avoid strong shadows, reflective surfaces, and moving backgrounds;
+- preserve sufficient overlap between neighboring views.
+
+### 2. Foreground Segmentation
+
+Foreground masks are generated with color priors, GrabCut or Segment Anything (SAM), followed by morphological refinement. White pixels represent the object and black pixels represent the background. These masks are used during preprocessing, point-cloud filtering, and foreground-only evaluation.
+
+### 3. Camera Pose and Geometry Initialization
+
+Camera poses can be estimated with COLMAP, DUSt3R, or MASt3R. The resulting sparse geometry is projected into multiple object masks to reject points that are inconsistent with the foreground observations. A Visual Hull initialization is also included as an experimental alternative.
+
+### 4. Gaussian Training and Repair
+
+The filtered geometry initializes the 3D Gaussian representation. The project first trains a coarse Gaussian model, renders leave-one-out views, fine-tunes the repair model with LoRA, and finally refines the Gaussian representation using repaired supervision. The supplied RTX 3080 configuration reduces memory-intensive settings while retaining the complete workflow.
+
+### 5. Rendering and Evaluation
+
+The final model can be rendered along a custom camera path to produce images or videos such as the two demos above. Reconstruction quality is evaluated with PSNR, SSIM, and LPIPS. Foreground-only metrics are also available to reduce the influence of large, uniform background regions.
 
 ## Environment
 
@@ -75,6 +114,37 @@ Available stages:
 downsample, pred_poses, train_gs, render_coarse,
 loo_stage1, loo_stage2, train_lora, repair, render_final
 ```
+
+### Required Model Weights
+
+Run the included download helper where applicable:
+
+```powershell
+Push-Location models
+python download_hf_models.py
+Pop-Location
+```
+
+Additional SAM, DUSt3R, and MASt3R weights should be placed in `models/` as described in [WINDOWS_3080_RUN.md](WINDOWS_3080_RUN.md). Model weights are intentionally excluded from Git because they are large and may have separate distribution terms.
+
+### Expected Dataset Layout
+
+A prepared object sequence should contain images, masks, and the camera or sparse-reconstruction files required by the selected pose-estimation route. A simplified layout is shown below:
+
+```text
+data/realcap/<object_name>/
+├── images/
+│   ├── 001.png
+│   ├── 002.png
+│   └── ...
+├── masks/
+│   ├── 001.png
+│   ├── 002.png
+│   └── ...
+└── sparse/ or pose-estimation outputs
+```
+
+Image and mask filenames must correspond. Incorrect masks or inconsistent numbering can lead to poor point filtering, broken camera alignment, or evaluation errors.
 
 ## Experimental Results
 
@@ -123,6 +193,42 @@ output/controlnet_finetune/rabbit/ckpts-lora/lora-step=1799.ckpt
 output/gaussian_object/rabbit/save/last.ply
 output/gs_init/rabbit/render/ours_None/
 ```
+
+The files serve different purposes:
+
+- `refined_cams.json` stores the refined camera parameters used by later stages.
+- `lora-step=1799.ckpt` is an intermediate LoRA checkpoint for the repair process.
+- `last.ply` is the final reconstructed Gaussian model.
+- `render/ours_None/` contains rendered frames that can be evaluated or assembled into an MP4 video.
+
+Generated checkpoints, full render sequences, datasets, and temporary training files are not intended to be committed to Git. Only compact demonstration media and selected evaluation figures should be kept in `assets/`.
+
+## Repository Structure
+
+```text
+OrbitSplat/
+├── arguments/              # Command-line and configuration arguments
+├── assets/                 # README figures and compact demo videos
+├── configs/                # Training configurations, including RTX 3080 presets
+├── gaussian_renderer/      # Gaussian rasterization and rendering interface
+├── preprocess/             # Input preprocessing utilities
+├── scene/                  # Cameras, datasets, and Gaussian model definitions
+├── scripts/                # Setup, execution, evaluation, and report scripts
+├── utils/                  # Shared utility functions
+├── models/                 # Download scripts and local model weights
+├── train_gs.py             # Initial Gaussian training
+├── train_lora.py           # LoRA fine-tuning
+├── train_repair.py         # Gaussian Repair stage
+└── render.py               # Image and novel-view rendering
+```
+
+## Limitations
+
+- Reconstruction quality depends strongly on mask accuracy and camera-pose quality.
+- Thin structures, transparent objects, highly reflective materials, and textureless surfaces remain challenging.
+- A purely horizontal capture may leave the top and bottom of the object underconstrained, even when many frames are used.
+- Gaussian Repair requires additional training time and model weights; it may not improve every scene equally.
+- The Windows path is optimized for an RTX 3080, but memory usage still varies with image resolution, point count, and densification settings.
 
 ## Intended Use
 
